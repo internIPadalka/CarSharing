@@ -25,6 +25,30 @@ public class Main {
                         "(id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, " +
                         " name VARCHAR(255) UNIQUE NOT NULL " + ")");
                 statement.executeUpdate("ALTER TABLE COMPANY " + "ALTER COLUMN id RESTART WITH 1");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS CAR " +
+                        "(id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, " +
+                        " name VARCHAR(255) UNIQUE NOT NULL, " +
+                        " company_id INT NOT NULL," +
+                        " CONSTRAINT fk_company FOREIGN KEY (company_id)" +
+                        " REFERENCES COMPANY(id)" +
+                        ")");
+
+                statement.executeUpdate("ALTER TABLE CAR " +
+                        "ALTER COLUMN id RESTART WITH 1");
+
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS CUSTOMER " +
+                        "(id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, " +
+                        " name VARCHAR(255) UNIQUE NOT NULL, " +
+                        " rented_car_id INT," +
+                        " CONSTRAINT fk_car FOREIGN KEY (rented_car_id)" +
+                        " REFERENCES CAR(id)" +
+                        ")");
+
+                statement.executeUpdate("ALTER TABLE CUSTOMER " +
+                        "ALTER COLUMN id RESTART WITH 1");
+
+                statement.executeUpdate("ALTER TABLE CUSTOMER " +
+                        "ALTER rented_car_id SET DEFAULT NULL");
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -57,7 +81,7 @@ public class Main {
             if (choice == 0) {
                 break;
             } else if (choice == 1) {
-                listAllCompanies(connection);
+                listAllCompanies(connection, "manager");
             } else if (choice == 2) {
                 createACompany(connection);
             }
@@ -83,33 +107,113 @@ public class Main {
         }
     }
 
-    private void listAllCompanies(Connection connection) {
+    private int listAllCompanies(Connection connection, String mOrC) {
         Statement statement;
         ResultSet companies;
         List<String> companyList = new ArrayList<>();
-
-
+        int chosenCompany;
         try {
             statement = connection.createStatement();
-            try {
-                companies = statement.executeQuery("SELECT * FROM COMPANY");
-                if (!companies.next()) {
-                    System.out.println("The company list is empty");
-                } else {
-                    while (true) {
-                        System.out.println(companies.getInt("id") + ". " + companies.getString("name"));
-                        companyList.add(companies.getString("name"));
-                        if (!companies.next()) {
-                            break;
-                        }
+            companies = statement.executeQuery("SELECT * FROM COMPANY");
+            if (!companies.next()) {
+                System.out.println("The company list is empty");
+                return -1;
+            } else {
+                System.out.println("\nChoose the company:");
+                while (true) {
+                    System.out.println(companies.getInt("id") + ". " + companies.getString("name"));
+                    companyList.add(companies.getString("name"));
+                    if (!companies.next()) {
+                        break;
                     }
-                    System.out.println("0. Back");
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
+                System.out.println("0. Back");
+                chosenCompany = Integer.parseInt(scanner.nextLine());
+                if (chosenCompany != 0) {
+                    String compName = companyList.get(chosenCompany - 1);
+
+                    if (mOrC.equals("manager")) {
+                        carMenu(connection, chosenCompany, compName);
+                    } else {
+                        return listAllCar(connection, chosenCompany, compName, "customer");
+                    }
+                }
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return 0;
+    }
+
+    private void carMenu(Connection connection, int chosenCompany, String compName) throws SQLException {
+        int choiceCar;
+        System.out.println("'" + compName + "' company");
+        while (true) {
+            System.out.println("\n1. Car list \n2. Create a car \n0. Back");
+            choiceCar = Integer.parseInt(scanner.nextLine());
+            if (choiceCar == 0) {
+                break;
+            } else if (choiceCar == 1) {
+                listAllCar(connection, chosenCompany, compName, "manager");
+            } else if (choiceCar == 2) {
+                createACar(connection, chosenCompany);
+            }
+        }
+    }
+
+    private void createACar(Connection connection, int chosenCompany) {
+        String carName;
+        System.out.println("\nEnter the car name:");
+        carName = scanner.nextLine();
+        String insertCompany = "INSERT INTO CAR (name, company_id) " +
+                "VALUES (?,?)";
+        try (PreparedStatement preparedStatement = connection.prepareStatement(insertCompany)) {
+            preparedStatement.setString(1, carName);
+            preparedStatement.setInt(2, chosenCompany);
+            preparedStatement.executeUpdate();
+            System.out.println("The car was added!");
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private int listAllCar(Connection connection, int chosenCompany, String compName, String mOrC){
+        Statement statement;
+        ResultSet cars;
+        int count = 1;
+        try {
+            statement = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+            cars = statement.executeQuery("SELECT * FROM CAR WHERE company_id = '" + chosenCompany + "'");
+                if (!cars.next()) {
+                    if (mOrC.equals("manager")) {
+                        System.out.println("The car list is empty!");
+                        return -1;
+                    } else {
+                        System.out.println("No available cars in the '" + compName + "' company.");
+                        return -1;
+                    }
+
+                } else {
+                    if (mOrC.equals("customer")) {
+                        System.out.println("\nChoose a car:");
+                    }
+                    while (true) {
+                        System.out.println(count + ". " + cars.getString("name") + ", car id: " + cars.getInt("id"));
+                        count++;
+
+                        if (!cars.next()) {
+                            break;
+                        }
+                    }
+                    if (mOrC.equals("customer")) {
+                        cars.absolute(Integer.parseInt(scanner.nextLine()));
+                        return cars.getInt("id");
+                    }
+                }
+            } catch (SQLException e){
+            e.printStackTrace();
+        }
+        return 0;
     }
 }
